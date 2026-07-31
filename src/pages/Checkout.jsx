@@ -2,8 +2,6 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { Search, Plus, Minus, X, AlertCircle, ShoppingCart, Scan, Tag, Trash2, CheckCircle, Percent, IndianRupee } from 'lucide-react'
 import { useProducts } from '../hooks/useProducts'
 import { useCheckout } from '../hooks/useCheckout'
-import { generateReceiptPDF } from '../lib/receiptGenerator'
-import { formatDate } from '../lib/utils'
 
 export default function Checkout() {
   const { products, loading: productsLoading, fetchProducts } = useProducts()
@@ -16,22 +14,9 @@ export default function Checkout() {
   const [discountPercent, setDiscountPercent] = useState('')
   const [discountAmount, setDiscountAmount] = useState('')
   
-  const [lastReceiptData, setLastReceiptData] = useState(null)
-
   useEffect(() => {
     fetchProducts()
   }, [fetchProducts])
-
-  useEffect(() => {
-    if (lastReceiptData) {
-      setTimeout(() => {
-        generateReceiptPDF(lastReceiptData)
-        setCart([])
-        setDiscountPercent('')
-        setDiscountAmount('')
-      }, 100)
-    }
-  }, [lastReceiptData])
   
   const filteredProducts = useMemo(() => {
     if (!searchTerm) return []
@@ -133,15 +118,10 @@ export default function Checkout() {
 
     const result = await processCheckout(cartForCheckout, saleType, grandTotal, numericDiscountAmount)
     if (result.success) {
-      alert(`Sale successful! Sale ID: ${result.saleId}. Generating receipt...`)
-      setLastReceiptData({
-        cart: [...cartForCheckout],
-        total: grandTotal,
-        discount: numericDiscountAmount,
-        saleType,
-        saleId: result.saleId,
-        date: formatDate(new Date().toISOString())
-      })
+      alert(`Sale successful! Sale ID: ${result.saleId}.`)
+      setCart([])
+      setDiscountPercent('')
+      setDiscountAmount('')
     }
   }
 
