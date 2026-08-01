@@ -25,7 +25,7 @@ export function useStatements() {
       const { data: sales, error: salesError } = await supabase
         .from('sales')
         .select(`
-          id, sale_type, total_amount, discount_amount, created_at,
+          id, sale_type, payment_method, total_amount, discount_amount, created_at,
           sale_items ( quantity, unit_price_used, subtotal, batches ( cost_price, products ( name, product_code, pricing_unit ) ) )
         `)
         .gte('created_at', start)

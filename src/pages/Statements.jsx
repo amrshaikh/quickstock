@@ -32,6 +32,7 @@ export default function Statements() {
       'Sale ID': s.id,
       'Date': formatDate(s.created_at),
       'Type': s.sale_type,
+      'Payment': s.payment_method || 'cash',
       'Discount': s.discount_amount,
       'Total Amount': s.total_amount
     }))
@@ -83,6 +84,7 @@ export default function Statements() {
     total: selectedSale.total_amount,
     discount: selectedSale.discount_amount,
     saleType: selectedSale.sale_type,
+    paymentMethod: selectedSale.payment_method || 'cash',
     date: formatDate(selectedSale.created_at),
     saleId: selectedSale.id
   } : null
@@ -153,6 +155,7 @@ export default function Statements() {
                   <tr className="border-b border-stone-100 text-stone-400 text-xs">
                     <th className="px-4 py-3 font-medium">Sale ID</th>
                     <th className="px-4 py-3 font-medium">Type</th>
+                    <th className="px-4 py-3 font-medium">Payment</th>
                     <th className="px-4 py-3 font-medium text-right">Total</th>
                   </tr>
                 )}
@@ -179,6 +182,11 @@ export default function Statements() {
                       <p className="text-[10px] text-stone-400">{formatDate(sale.created_at)}</p>
                     </td>
                     <td className="px-4 py-3 text-xs capitalize text-stone-600">{sale.sale_type}</td>
+                    <td className="px-4 py-3 text-xs capitalize text-stone-600">
+                      <span className={`px-2 py-0.5 rounded-full ${sale.payment_method === 'online' ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-100 text-stone-600'}`}>
+                        {sale.payment_method || 'cash'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <p className="font-bold text-sm text-stone-800">₹{sale.total_amount.toFixed(2)}</p>
                       {sale.discount_amount > 0 && <p className="text-[10px] text-red-500">-₹{sale.discount_amount.toFixed(2)}</p>}
@@ -212,7 +220,7 @@ export default function Statements() {
                   (activeTab === 'profit' && salesData.length === 0) || 
                   (activeTab === 'stock' && stockData.length === 0)) && !loading && (
                   <tr>
-                    <td colSpan="3" className="px-4 py-10 text-center text-stone-400 text-sm">No data found for this period.</td>
+                    <td colSpan="4" className="px-4 py-10 text-center text-stone-400 text-sm">No data found for this period.</td>
                   </tr>
                 )}
               </tbody>
@@ -256,6 +264,7 @@ export default function Statements() {
                 <p className="text-[10px] text-stone-500 text-left">Receipt #: {receiptData.saleId}</p>
                 <p className="text-[10px] text-stone-500 text-left">Date: {receiptData.date}</p>
                 <p className="text-[10px] text-stone-500 text-left capitalize">Type: {receiptData.saleType}</p>
+                <p className="text-[10px] text-stone-500 text-left capitalize">Payment: {receiptData.paymentMethod}</p>
               </div>
               
               <table className="w-full text-xs mb-4">

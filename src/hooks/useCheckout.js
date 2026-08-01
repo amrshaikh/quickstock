@@ -5,7 +5,7 @@ export function useCheckout() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const processCheckout = async (cartItems, saleType, totalAmount, discountAmount) => {
+  const processCheckout = async (cartItems, saleType, totalAmount, discountAmount, paymentMethod = 'cash') => {
     setLoading(true)
     setError(null)
     
@@ -13,7 +13,7 @@ export function useCheckout() {
       // 1. Create Sale Record
       const { data: saleData, error: saleError } = await supabase
         .from('sales')
-        .insert([{ sale_type: saleType, total_amount: totalAmount, discount_amount: discountAmount }])
+        .insert([{ sale_type: saleType, total_amount: totalAmount, discount_amount: discountAmount, payment_method: paymentMethod }])
         .select()
         .single()
         

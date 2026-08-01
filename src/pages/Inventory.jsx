@@ -1,13 +1,15 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Plus, PackagePlus, Search, Package } from 'lucide-react'
+import { Plus, PackagePlus, Search, Package, Edit2 } from 'lucide-react'
 import { useProducts } from '../hooks/useProducts'
 import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabaseClient'
 
 export default function Inventory() {
-  const { products, loading, error, fetchProducts, addProduct } = useProducts()
+  const { products, loading, error, fetchProducts, addProduct, updateProduct } = useProducts()
   const [isProductModalOpen, setProductModalOpen] = useState(false)
   const [isBatchModalOpen, setBatchModalOpen] = useState(false)
+  const [isDetailsModalOpen, setDetailsModalOpen] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [searchQ, setSearchQ] = useState('')
 
@@ -30,6 +32,29 @@ export default function Inventory() {
     }
     await addProduct(data)
     setProductModalOpen(false)
+  }
+
+  const handleUpdateProduct = async (e) => {
+    e.preventDefault()
+    const fd = new FormData(e.target)
+    const data = {
+      name: fd.get('name'),
+      variety: fd.get('variety'),
+      product_code: fd.get('product_code'),
+      pricing_unit: fd.get('pricing_unit'),
+      retail_price: Number(fd.get('retail_price')),
+      wholesale_price: Number(fd.get('wholesale_price')) || null,
+      is_wholesale_eligible: fd.get('is_wholesale_eligible') === 'on',
+      shelf_life_days: Number(fd.get('shelf_life_days'))
+    }
+    const result = await updateProduct(selectedProduct.id, data)
+    if (result.success) {
+      const updatedProduct = { ...selectedProduct, ...data }
+      setSelectedProduct(updatedProduct)
+      setIsEditMode(false)
+    } else {
+      alert("Error updating product: " + result.error)
+    }
   }
 
   const handleAddBatch = async (e) => {
@@ -110,7 +135,14 @@ export default function Inventory() {
           <div className="py-8 text-center text-stone-400 text-sm">Loading products...</div>
         ) : filteredProducts.map(prod => (
           <div key={prod.id} className="bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden">
-            <div className="p-4">
+            <div 
+              className="p-4 cursor-pointer hover:bg-stone-50 transition-colors"
+              onClick={() => {
+                setSelectedProduct(prod)
+                setIsEditMode(false)
+                setDetailsModalOpen(true)
+              }}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -124,7 +156,7 @@ export default function Inventory() {
                   </div>
                 </div>
                 <span className={`text-xs px-2.5 py-1 rounded-full font-semibold whitespace-nowrap ${stockBadge(prod.totalStock)}`}>
-                  {Number(prod.totalStock).toFixed(2)} {prod.pricing_unit}
+                  {Number(prod.totalStock).toFixed(3)} {prod.pricing_unit === 'per_kg' ? 'kg' : 'pcs'}
                 </span>
               </div>
 
@@ -217,8 +249,8 @@ export default function Inventory() {
             <input name="quantity" type="number" step="0.01" required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-stone-600 mb-1">Total Cost Price (₹)</label>
-            <input name="cost_price" type="number" step="0.01" required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" placeholder="Total cost for this batch" />
+            <label className="block text-xs font-semibold text-stone-600 mb-1">Cost Price ({selectedProduct?.pricing_unit === 'per_kg' ? 'per kg' : 'per piece'}) (₹)</label>
+            <input name="cost_price" type="number" step="0.01" required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" placeholder={`Cost price ${selectedProduct?.pricing_unit === 'per_kg' ? 'per kg' : 'per piece'}`} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-stone-600 mb-1">Date Received</label>
@@ -228,6 +260,108 @@ export default function Inventory() {
             <button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 text-white py-3 rounded-xl font-bold text-sm shadow-md hover:from-emerald-700 hover:to-emerald-600 transition-all">Add Batch</button>
           </div>
         </form>
+      </Modal>
+
+      <Modal isOpen={isDetailsModalOpen} onClose={() => setDetailsModalOpen(false)} title="Product Details">
+        {selectedProduct && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center bg-stone-50 p-3 rounded-xl border border-stone-100">
+              <div>
+                <h3 className="font-bold text-stone-800 text-lg">{selectedProduct.name}</h3>
+                <p className="text-xs text-stone-500 font-mono">{selectedProduct.product_code}</p>
+              </div>
+              <button
+                onClick={() => setIsEditMode(!isEditMode)}
+                className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg border border-stone-200 bg-white text-stone-600 hover:bg-stone-100 transition-colors"
+              >
+                <Edit2 size={12} /> {isEditMode ? 'Cancel Edit' : 'Edit Details'}
+              </button>
+            </div>
+
+            {isEditMode ? (
+              <form onSubmit={handleUpdateProduct} className="space-y-4 bg-white p-4 rounded-xl border border-stone-100">
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-600 mb-1">Name</label>
+                    <input name="name" defaultValue={selectedProduct.name} required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-600 mb-1">Product Code</label>
+                      <input name="product_code" defaultValue={selectedProduct.product_code} required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-600 mb-1">Variety</label>
+                      <input name="variety" defaultValue={selectedProduct.variety || ''} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-600 mb-1">Retail Price (₹)</label>
+                      <input name="retail_price" type="number" step="0.01" defaultValue={selectedProduct.retail_price} required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-600 mb-1">Wholesale Price (₹)</label>
+                      <input name="wholesale_price" type="number" step="0.01" defaultValue={selectedProduct.wholesale_price || ''} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-600 mb-1">Pricing Unit</label>
+                      <select name="pricing_unit" defaultValue={selectedProduct.pricing_unit} required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none">
+                        <option value="per_kg">Per kg</option>
+                        <option value="per_piece">Per piece</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-600 mb-1">Shelf Life (Days)</label>
+                      <input name="shelf_life_days" type="number" defaultValue={selectedProduct.shelf_life_days} required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-2 flex justify-end">
+                  <button type="submit" className="bg-amber-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md hover:bg-amber-700 transition-all">Save Changes</button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-white border border-stone-100 rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 bg-stone-50 border-b border-stone-100">
+                    <h4 className="text-xs font-bold text-stone-600">Stock Batches History</h4>
+                  </div>
+                  <div className="overflow-x-auto max-h-[40vh] no-scrollbar">
+                    <table className="w-full text-left text-xs relative">
+                      <thead className="sticky top-0 bg-white">
+                        <tr className="border-b border-stone-100 text-stone-400">
+                          <th className="px-4 py-2 font-medium">Date</th>
+                          <th className="px-4 py-2 font-medium text-right">Rcvd</th>
+                          <th className="px-4 py-2 font-medium text-right">Rem</th>
+                          <th className="px-4 py-2 font-medium text-right">Cost</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-50">
+                        {selectedProduct.batches && selectedProduct.batches.length > 0 ? (
+                          selectedProduct.batches.map(batch => (
+                            <tr key={batch.id} className="hover:bg-stone-50 transition-colors">
+                              <td className="px-4 py-3 text-stone-600">{new Date(batch.date_added).toLocaleDateString()}</td>
+                              <td className="px-4 py-3 text-right font-medium text-stone-700">{Number(batch.quantity_received).toFixed(3)}</td>
+                              <td className="px-4 py-3 text-right font-bold text-amber-700">{Number(batch.quantity_remaining).toFixed(3)}</td>
+                              <td className="px-4 py-3 text-right text-emerald-600">₹{batch.cost_price}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="4" className="px-4 py-6 text-center text-stone-400">No batch history found.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   )

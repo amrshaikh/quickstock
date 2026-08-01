@@ -13,6 +13,7 @@ export default function Checkout() {
   
   const [discountPercent, setDiscountPercent] = useState('')
   const [discountAmount, setDiscountAmount] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('cash')
   
   useEffect(() => {
     fetchProducts()
@@ -42,9 +43,19 @@ export default function Checkout() {
       retail_price: product.retail_price,
       wholesale_price: product.wholesale_price,
       is_wholesale_eligible: product.is_wholesale_eligible,
-      quantity: product.pricing_unit === 'per_kg' ? 1 : 1
+      quantity: product.pricing_unit === 'per_kg' ? 1 : 1,
+      input_unit: product.pricing_unit === 'per_kg' ? 'g' : 'pcs'
     }])
     setSearchTerm('')
+  }
+  
+  const toggleInputUnit = (productId) => {
+    setCart(cart.map(item => {
+      if (item.product_id === productId && item.pricing_unit === 'per_kg') {
+        return { ...item, input_unit: item.input_unit === 'g' ? 'kg' : 'g' }
+      }
+      return item
+    }))
   }
 
   const updateQuantity = (productId, newQuantity) => {
@@ -71,7 +82,8 @@ export default function Checkout() {
     const price = saleType === 'wholesale' && item.wholesale_price 
       ? item.wholesale_price 
       : item.retail_price
-    return Math.round(price * item.quantity)
+    const qty = Number(item.quantity) || 0;
+    return Math.round((Number(price) || 0) * qty)
   }
 
   const subtotal = cart.reduce((sum, item) => sum + calculateItemPrice(item), 0)
@@ -116,12 +128,13 @@ export default function Checkout() {
         : item.retail_price
     }))
 
-    const result = await processCheckout(cartForCheckout, saleType, grandTotal, numericDiscountAmount)
+    const result = await processCheckout(cartForCheckout, saleType, grandTotal, numericDiscountAmount, paymentMethod)
     if (result.success) {
       alert(`Sale successful! Sale ID: ${result.saleId}.`)
       setCart([])
       setDiscountPercent('')
       setDiscountAmount('')
+      setPaymentMethod('cash')
     }
   }
 
@@ -213,9 +226,9 @@ export default function Checkout() {
         ) : (
           <div className="divide-y divide-stone-50">
             {cart.map(item => {
-              const unitStep = item.pricing_unit === 'per_kg' ? 0.5 : 1
-              const displayUnit = item.pricing_unit === 'per_kg' ? 'kg' : 'pcs'
+              const unitStep = item.pricing_unit === 'per_kg' ? (item.input_unit === 'g' ? 0.05 : 0.5) : 1
               const currentPrice = calculateItemPrice(item)
+              const qty = Number(item.quantity) || 0
               
               const itemUnitPrice = saleType === 'wholesale' && item.wholesale_price 
                 ? item.wholesale_price 
@@ -235,7 +248,7 @@ export default function Checkout() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 bg-stone-50 rounded-xl p-1">
                     <button
-                      onClick={() => updateQuantity(item.product_id, Number(item.quantity) - unitStep)}
+                      onClick={() => updateQuantity(item.product_id, qty - unitStep)}
                       className="w-7 h-7 rounded-lg bg-white shadow-sm text-stone-600 flex items-center justify-center hover:bg-amber-50 active:scale-95 transition-all"
                     >
                       <Minus size={12}/>
@@ -244,16 +257,19 @@ export default function Checkout() {
                       <input
                         type="number"
                         step="0.01"
-                        value={item.quantity === 0 ? '' : (item.pricing_unit === 'per_kg' ? Number((item.quantity * 1000).toFixed(2)) : item.quantity)}
-                        onChange={e => updateQuantity(item.product_id, item.pricing_unit === 'per_kg' ? Number(e.target.value)/1000 : e.target.value)}
-                        className="w-14 text-center text-sm font-semibold text-stone-700 bg-transparent focus:outline-none"
+                        value={qty === 0 ? '' : (item.input_unit === 'g' ? Number((qty * 1000).toFixed(2)) : Number(qty.toFixed(2)))}
+                        onChange={e => updateQuantity(item.product_id, item.input_unit === 'g' ? Number(e.target.value)/1000 : e.target.value)}
+                        className="w-16 text-center text-sm font-semibold text-stone-700 bg-transparent focus:outline-none pr-4"
                       />
-                      <span className="absolute right-0 top-1/2 -translate-y-1/2 text-[10px] text-stone-400 font-medium pointer-events-none pr-1">
-                        {item.pricing_unit === 'per_kg' ? 'g' : ''}
-                      </span>
+                      <button
+                        onClick={() => toggleInputUnit(item.product_id)}
+                        className={`absolute right-0 top-1/2 -translate-y-1/2 text-[9px] font-bold px-1 py-0.5 mr-0.5 rounded transition-colors ${item.pricing_unit === 'per_kg' ? 'cursor-pointer hover:bg-stone-200 text-stone-500 bg-stone-100' : 'pointer-events-none text-stone-400'}`}
+                      >
+                        {item.input_unit === 'g' ? 'g' : (item.pricing_unit === 'per_kg' ? 'kg' : '')}
+                      </button>
                     </div>
                     <button
-                      onClick={() => updateQuantity(item.product_id, Number(item.quantity) + unitStep)}
+                      onClick={() => updateQuantity(item.product_id, qty + unitStep)}
                       className="w-7 h-7 rounded-lg bg-white shadow-sm text-stone-600 flex items-center justify-center hover:bg-amber-50 active:scale-95 transition-all"
                     >
                       <Plus size={12}/>
@@ -317,6 +333,24 @@ export default function Checkout() {
             )}
             <div className="flex justify-between text-base font-bold text-stone-800 pt-1 border-t border-stone-100">
               <span>Total</span><span className="text-amber-700 text-lg">₹{grandTotal}</span>
+            </div>
+          </div>
+          
+          <div className="pt-2 border-t border-stone-100">
+            <p className="text-xs font-semibold text-stone-500 mb-2">Payment Method</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPaymentMethod('cash')}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${paymentMethod === 'cash' ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}
+              >
+                Cash
+              </button>
+              <button
+                onClick={() => setPaymentMethod('online')}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${paymentMethod === 'online' ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}
+              >
+                Online
+              </button>
             </div>
           </div>
 

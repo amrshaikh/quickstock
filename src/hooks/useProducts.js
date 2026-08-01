@@ -16,7 +16,7 @@ export function useProducts() {
         .select(`
           *,
           batches (
-            id, quantity_remaining, cost_price, date_added
+            id, quantity_received, quantity_remaining, cost_price, date_added
           )
         `)
         .order('name')

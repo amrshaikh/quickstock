@@ -35,6 +35,10 @@ export const generateReceiptPDF = (receiptData) => {
     y += 4;
     pdf.text(`Type: ${receiptData.saleType}`, 5, y);
     y += 4;
+    if (receiptData.paymentMethod) {
+      pdf.text(`Payment: ${receiptData.paymentMethod}`, 5, y);
+      y += 4;
+    }
     
     pdf.line(5, y, 75, y);
     y += 4;
@@ -149,8 +153,9 @@ export const generateStatementPDF = (activeTab, data) => {
     if (activeTab === 'sales') {
       pdf.text("Sale ID", 18, colY);
       pdf.text("Date", 60, colY);
-      pdf.text("Type", 110, colY);
-      pdf.text("Discount", 155, colY, { align: "right" });
+      pdf.text("Type", 95, colY);
+      pdf.text("Payment", 125, colY);
+      pdf.text("Discount", 160, colY, { align: "right" });
       pdf.text("Total", 192, colY, { align: "right" });
       y += 8;
       
@@ -158,8 +163,9 @@ export const generateStatementPDF = (activeTab, data) => {
       salesData.forEach((sale) => {
         pdf.text(sale.id.slice(0, 8), 18, y + 5.5);
         pdf.text(new Date(sale.created_at).toLocaleString(), 60, y + 5.5);
-        pdf.text(sale.sale_type, 110, y + 5.5);
-        pdf.text(`Rs ${sale.discount_amount.toFixed(2)}`, 155, y + 5.5, { align: "right" });
+        pdf.text(sale.sale_type, 95, y + 5.5);
+        pdf.text(sale.payment_method || 'cash', 125, y + 5.5);
+        pdf.text(`Rs ${sale.discount_amount.toFixed(2)}`, 160, y + 5.5, { align: "right" });
         pdf.setFont("helvetica", "bold");
         pdf.text(`Rs ${sale.total_amount.toFixed(2)}`, 192, y + 5.5, { align: "right" });
         pdf.setFont("helvetica", "normal");
