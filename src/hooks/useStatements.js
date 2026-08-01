@@ -25,8 +25,8 @@ export function useStatements() {
       const { data: sales, error: salesError } = await supabase
         .from('sales')
         .select(`
-          id, sale_type, payment_method, total_amount, discount_amount, created_at,
-          sale_items ( quantity, unit_price_used, subtotal, batches ( cost_price, products ( name, product_code, pricing_unit ) ) )
+          id, receipt_number, sale_type, payment_method, total_amount, discount_amount, created_at,
+          sale_items ( product_id, quantity, unit_price_used, subtotal, batches ( cost_price, products ( name, product_code, pricing_unit ) ) )
         `)
         .gte('created_at', start)
         .lte('created_at', end)
@@ -80,5 +80,72 @@ export function useStatements() {
     }
   }, [])
 
-  return { salesData, stockData, loading, error, fetchStatements }
+  const deleteSale = async (saleId) => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      // 1. Fetch all items for this sale
+      const { data: saleItems, error: fetchError } = await supabase
+        .from('sale_items')
+        .select('*')
+        .eq('sale_id', saleId)
+        
+      if (fetchError) throw fetchError
+
+      // 2. Restore quantities to batches
+      // Group by batch_id in case there are duplicates
+      const batchRestorations = {}
+      saleItems.forEach(item => {
+        batchRestorations[item.batch_id] = (batchRestorations[item.batch_id] || 0) + Number(item.quantity)
+      })
+
+      for (const [batchId, quantityToRestore] of Object.entries(batchRestorations)) {
+        // Fetch current quantity to ensure we increment correctly (avoids race conditions as best as we can without RPC)
+        const { data: batch, error: batchError } = await supabase
+          .from('batches')
+          .select('quantity_remaining')
+          .eq('id', batchId)
+          .single()
+          
+        if (batchError) throw batchError
+        
+        const { error: updateError } = await supabase
+          .from('batches')
+          .update({ quantity_remaining: Number(batch.quantity_remaining) + quantityToRestore })
+          .eq('id', batchId)
+          
+        if (updateError) throw updateError
+      }
+
+      // 3. Delete sale_items (might be cascading, but safe to explicitly delete)
+      const { error: deleteItemsError } = await supabase
+        .from('sale_items')
+        .delete()
+        .eq('sale_id', saleId)
+        
+      if (deleteItemsError) throw deleteItemsError
+
+      // 4. Delete the sale
+      const { error: deleteSaleError } = await supabase
+        .from('sales')
+        .delete()
+        .eq('id', saleId)
+        
+      if (deleteSaleError) throw deleteSaleError
+      
+      // Refresh the data
+      fetchStatements()
+      return { success: true }
+      
+    } catch (err) {
+      console.error("Error deleting sale:", err)
+      setError(err.message || "Failed to delete sale")
+      return { success: false, error: err.message }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return { salesData, stockData, loading, error, fetchStatements, deleteSale }
 }

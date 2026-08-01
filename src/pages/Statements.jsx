@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Calendar, Filter, FileSpreadsheet, FileText, Download, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Calendar, Filter, FileSpreadsheet, FileText, Download, X, Trash2, Pencil } from 'lucide-react'
 import { useStatements } from '../hooks/useStatements'
 import { exportToCSV, formatDate } from '../lib/utils'
 import { Modal } from '../components/ui/Modal'
@@ -7,7 +8,8 @@ import { Receipt as ReceiptGenerator } from '../components/receipt/Receipt'
 import { generateReceiptPDF, generateStatementPDF } from '../lib/receiptGenerator'
 
 export default function Statements() {
-  const { salesData, stockData, loading, fetchStatements } = useStatements()
+  const navigate = useNavigate()
+  const { salesData, stockData, loading, fetchStatements, deleteSale } = useStatements()
   const [activeTab, setActiveTab] = useState('sales') // 'sales', 'profit', 'stock'
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -86,11 +88,12 @@ export default function Statements() {
     saleType: selectedSale.sale_type,
     paymentMethod: selectedSale.payment_method || 'cash',
     date: formatDate(selectedSale.created_at),
-    saleId: selectedSale.id
+    saleId: selectedSale.receipt_number || selectedSale.id,
+    rawId: selectedSale.id
   } : null
 
   return (
-    <div className="p-4 space-y-4 pb-8">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 pb-8">
       {/* Tab Filter */}
       <div className="bg-white rounded-xl shadow-sm border border-stone-100 p-1 flex gap-1">
         {[
@@ -178,7 +181,7 @@ export default function Statements() {
                 {activeTab === 'sales' && salesData.map(sale => (
                   <tr key={sale.id} onClick={() => setSelectedSale(sale)} className="hover:bg-stone-50 transition-colors cursor-pointer">
                     <td className="px-4 py-3">
-                      <p className="text-sm font-mono text-stone-700">{sale.id.slice(0, 8)}</p>
+                      <p className="text-sm font-mono text-stone-700">{sale.receipt_number || sale.id.slice(0, 8)}</p>
                       <p className="text-[10px] text-stone-400">{formatDate(sale.created_at)}</p>
                     </td>
                     <td className="px-4 py-3 text-xs capitalize text-stone-600">{sale.sale_type}</td>
@@ -197,7 +200,7 @@ export default function Statements() {
                 {activeTab === 'profit' && salesData.map(sale => (
                   <tr key={sale.id} onClick={() => setSelectedSale(sale)} className="hover:bg-stone-50 transition-colors cursor-pointer">
                     <td className="px-4 py-3">
-                      <p className="text-sm font-mono text-stone-700">{sale.id.slice(0, 8)}</p>
+                      <p className="text-sm font-mono text-stone-700">{sale.receipt_number || sale.id.slice(0, 8)}</p>
                       <p className="text-[10px] text-stone-400">₹{sale.total_amount.toFixed(2)} Rev</p>
                     </td>
                     <td className="px-4 py-3 text-xs text-stone-500 text-right">₹{sale.total_cost.toFixed(2)}</td>
@@ -302,12 +305,36 @@ export default function Statements() {
               </div>
             </div>
             
-            <button
-              onClick={() => generateReceiptPDF(receiptData)}
-              className="w-full bg-amber-600 text-white rounded-xl py-3 text-sm font-bold shadow-md hover:bg-amber-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-            >
-              <Download size={16}/> Download PDF Receipt
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if(window.confirm('Are you sure you want to delete this sale? This will instantly restore all items back to inventory.')) {
+                    deleteSale(selectedSale.id).then((res) => {
+                      if (res.success) setSelectedSale(null)
+                    })
+                  }
+                }}
+                className="flex-1 bg-red-50 text-red-600 rounded-xl py-3 text-sm font-bold shadow-sm border border-red-100 hover:bg-red-100 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <Trash2 size={16}/> Delete
+              </button>
+              
+              <button
+                onClick={() => {
+                  navigate('/checkout', { state: { editSale: selectedSale } })
+                }}
+                className="flex-1 bg-stone-100 text-stone-700 rounded-xl py-3 text-sm font-bold shadow-sm border border-stone-200 hover:bg-stone-200 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <Pencil size={16}/> Edit
+              </button>
+              
+              <button
+                onClick={() => generateReceiptPDF(receiptData)}
+                className="flex-[2] bg-amber-600 text-white rounded-xl py-3 text-sm font-bold shadow-md hover:bg-amber-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <Download size={16}/> Receipt
+              </button>
+            </div>
           </div>
         )}
       </Modal>

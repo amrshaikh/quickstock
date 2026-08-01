@@ -13,31 +13,37 @@ export default function Dashboard() {
   const margin = metrics.todayRevenue > 0 ? ((metrics.todayProfit / metrics.todayRevenue) * 100).toFixed(1) : 0
 
   return (
-    <div className="p-4 space-y-4 pb-8">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 pb-8">
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
-          <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center mb-3">
-            <DollarSign size={18} className="text-amber-700"/>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 flex flex-col justify-between">
+          <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center mb-4">
+            <DollarSign size={20} className="text-amber-700"/>
           </div>
-          <p className="text-xl font-bold text-amber-700">₹{metrics.todayRevenue.toFixed(2)}</p>
-          <p className="text-xs text-stone-400 mt-0.5">Today's Revenue</p>
+          <div>
+            <p className="text-2xl font-bold text-amber-700">₹{metrics.todayRevenue.toFixed(2)}</p>
+            <p className="text-xs text-stone-400 mt-1 font-medium">Today's Revenue</p>
+          </div>
         </div>
         
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
-          <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center mb-3">
-            <TrendingUp size={18} className="text-emerald-700"/>
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 flex flex-col justify-between">
+          <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center mb-4">
+            <TrendingUp size={20} className="text-emerald-700"/>
           </div>
-          <p className="text-xl font-bold text-emerald-700">₹{metrics.todayProfit.toFixed(2)}</p>
-          <p className="text-xs text-stone-400 mt-0.5">Today's Profit</p>
+          <div>
+            <p className="text-2xl font-bold text-emerald-700">₹{metrics.todayProfit.toFixed(2)}</p>
+            <p className="text-xs text-stone-400 mt-1 font-medium">Today's Profit</p>
+          </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
-          <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center mb-3">
-            <CheckCircle size={18} className="text-blue-600"/>
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 flex flex-col justify-between col-span-2 md:col-span-1">
+          <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center mb-4">
+            <CheckCircle size={20} className="text-blue-600"/>
           </div>
-          <p className="text-xl font-bold text-blue-600">{metrics.todaySalesCount}</p>
-          <p className="text-xs text-stone-400 mt-0.5">Total Orders</p>
+          <div>
+            <p className="text-2xl font-bold text-blue-600">{metrics.todaySalesCount}</p>
+            <p className="text-xs text-stone-400 mt-1 font-medium">Total Orders</p>
+          </div>
         </div>
       </div>
 

@@ -1,11 +1,17 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Search, Plus, Minus, X, AlertCircle, ShoppingCart, Scan, Tag, Trash2, CheckCircle, Percent, IndianRupee } from 'lucide-react'
 import { useProducts } from '../hooks/useProducts'
 import { useCheckout } from '../hooks/useCheckout'
 
 export default function Checkout() {
   const { products, loading: productsLoading, fetchProducts } = useProducts()
-  const { processCheckout, loading: checkoutLoading, error: checkoutError } = useCheckout()
+  const { processCheckout, updateSale, loading: checkoutLoading, error: checkoutError } = useCheckout()
+  const location = useLocation()
+  const navigate = useNavigate()
+  
+  const editSale = location.state?.editSale
+  const [cartInitialized, setCartInitialized] = useState(false)
   
   const [searchTerm, setSearchTerm] = useState('')
   const [cart, setCart] = useState([])
@@ -18,6 +24,40 @@ export default function Checkout() {
   useEffect(() => {
     fetchProducts()
   }, [fetchProducts])
+
+  useEffect(() => {
+    if (editSale && products.length > 0 && !cartInitialized) {
+      setSaleType(editSale.sale_type || 'retail')
+      setPaymentMethod(editSale.payment_method || 'cash')
+      setDiscountAmount(editSale.discount_amount ? editSale.discount_amount.toString() : '')
+      
+      const groupedCart = {}
+      editSale.sale_items.forEach(item => {
+        if (!groupedCart[item.product_id]) {
+          const p = products.find(prod => prod.id === item.product_id)
+          if (p) {
+            groupedCart[item.product_id] = {
+              product_id: p.id,
+              name: p.name,
+              code: p.product_code,
+              pricing_unit: (p.batches?.find(b => b.quantity_remaining > 0) || p.batches?.[0])?.pricing_unit || p.pricing_unit || 'per_kg',
+              retail_price: (p.batches?.find(b => b.quantity_remaining > 0) || p.batches?.[0])?.retail_price || p.retail_price || 0,
+              wholesale_price: (p.batches?.find(b => b.quantity_remaining > 0) || p.batches?.[0])?.wholesale_price || p.wholesale_price || 0,
+              is_wholesale_eligible: p.is_wholesale_eligible,
+              quantity: 0,
+              input_unit: ((p.batches?.find(b => b.quantity_remaining > 0) || p.batches?.[0])?.pricing_unit || p.pricing_unit || 'per_kg') === 'per_kg' ? 'g' : 'pcs'
+            }
+          }
+        }
+        if (groupedCart[item.product_id]) {
+          groupedCart[item.product_id].quantity += Number(item.quantity)
+        }
+      })
+      
+      setCart(Object.values(groupedCart))
+      setCartInitialized(true)
+    }
+  }, [editSale, products, cartInitialized])
   
   const filteredProducts = useMemo(() => {
     if (!searchTerm) return []
@@ -29,8 +69,11 @@ export default function Checkout() {
   }, [searchTerm, products])
 
   const addToCart = (product) => {
+    const activeBatch = product.batches?.find(b => b.quantity_remaining > 0) || product.batches?.[0]
+    const pricingUnit = activeBatch?.pricing_unit || product.pricing_unit || 'per_kg'
+
     if (cart.find(item => item.product_id === product.id)) {
-      updateQuantity(product.id, cart.find(item => item.product_id === product.id).quantity + (product.pricing_unit === 'per_kg' ? 0.5 : 1))
+      updateQuantity(product.id, cart.find(item => item.product_id === product.id).quantity + (pricingUnit === 'per_kg' ? 0.5 : 1))
       setSearchTerm('')
       return;
     }
@@ -39,12 +82,12 @@ export default function Checkout() {
       product_id: product.id,
       name: product.name,
       code: product.product_code,
-      pricing_unit: product.pricing_unit,
-      retail_price: product.retail_price,
-      wholesale_price: product.wholesale_price,
+      pricing_unit: pricingUnit,
+      retail_price: activeBatch?.retail_price || product.retail_price || 0,
+      wholesale_price: activeBatch?.wholesale_price || product.wholesale_price || 0,
       is_wholesale_eligible: product.is_wholesale_eligible,
-      quantity: product.pricing_unit === 'per_kg' ? 1 : 1,
-      input_unit: product.pricing_unit === 'per_kg' ? 'g' : 'pcs'
+      quantity: 1,
+      input_unit: pricingUnit === 'per_kg' ? 'g' : 'pcs'
     }])
     setSearchTerm('')
   }
@@ -128,18 +171,30 @@ export default function Checkout() {
         : item.retail_price
     }))
 
-    const result = await processCheckout(cartForCheckout, saleType, grandTotal, numericDiscountAmount, paymentMethod)
-    if (result.success) {
-      alert(`Sale successful! Sale ID: ${result.saleId}.`)
-      setCart([])
-      setDiscountPercent('')
-      setDiscountAmount('')
-      setPaymentMethod('cash')
+    let result
+    if (editSale) {
+      result = await updateSale(editSale.id, cartForCheckout, saleType, grandTotal, numericDiscountAmount, paymentMethod)
+      if (result.success) {
+        alert(`Sale updated! Sale ID: ${result.saleId}.`)
+        navigate('/statements')
+      }
+    } else {
+      result = await processCheckout(cartForCheckout, saleType, grandTotal, numericDiscountAmount, paymentMethod)
+      if (result.success) {
+        alert(`Sale successful! Sale ID: ${result.saleId}.`)
+        setCart([])
+        setDiscountPercent('')
+        setDiscountAmount('')
+        setPaymentMethod('cash')
+      }
     }
   }
 
   return (
-    <div className="p-4 space-y-4 pb-20">
+    <div className="p-4 md:p-6 lg:p-8 pb-20 md:pb-8 flex flex-col md:flex-row gap-6 items-start">
+      
+      {/* Left Column: Search & Selection */}
+      <div className="flex-1 w-full space-y-4">
 
       {checkoutError && (
         <div className="bg-red-50 text-red-600 p-3 rounded-xl flex items-center gap-2 text-sm border border-red-200">
@@ -200,7 +255,10 @@ export default function Checkout() {
           </div>
         )}
       </div>
+    </div>
 
+    {/* Right Column: Cart & Checkout */}
+    <div className="w-full md:w-[380px] lg:w-[420px] shrink-0 space-y-4 sticky top-6">
       {/* Cart */}
       <div className="bg-white rounded-2xl shadow-sm border border-stone-100">
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-stone-100">
@@ -360,10 +418,11 @@ export default function Checkout() {
             className="w-full bg-gradient-to-r from-amber-600 to-amber-500 text-white rounded-xl py-3.5 font-bold text-sm shadow-md hover:shadow-amber-200 hover:from-amber-700 hover:to-amber-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
             <CheckCircle size={18}/> 
-            {checkoutLoading ? 'Processing...' : `Complete Checkout — ₹${grandTotal}`}
+            {checkoutLoading ? (editSale ? 'Updating...' : 'Processing...') : (editSale ? `Update Sale — ₹${grandTotal}` : `Complete Checkout — ₹${grandTotal}`)}
           </button>
         </div>
       )}
+      </div>
     </div>
   )
 }

@@ -10,23 +10,26 @@ export function useProducts() {
     setLoading(true)
     setError(null)
     try {
-      // Fetch products and their batches
+      // Fetch products and their batches, filtering out soft-deleted products
       const { data, error: fetchError } = await supabase
         .from('products')
         .select(`
           *,
           batches (
-            id, quantity_received, quantity_remaining, cost_price, date_added
+            id, quantity_received, quantity_remaining, cost_price, date_added, pricing_unit, retail_price, wholesale_price, is_deleted
           )
         `)
+        .neq('is_deleted', true)
         .order('name')
 
       if (fetchError) throw fetchError
 
       // Calculate total stock for each product
       const productsWithStock = data.map(product => {
-        const totalStock = product.batches.reduce((sum, b) => sum + Number(b.quantity_remaining), 0)
-        return { ...product, totalStock }
+        // filter out soft-deleted batches
+        const activeBatches = product.batches ? product.batches.filter(b => b.is_deleted !== true) : []
+        const totalStock = activeBatches.reduce((sum, b) => sum + Number(b.quantity_remaining), 0)
+        return { ...product, batches: activeBatches, totalStock }
       })
 
       setProducts(productsWithStock)
@@ -76,8 +79,11 @@ export function useProducts() {
     setLoading(true)
     setError(null)
     try {
-      const { error: deleteError } = await supabase.from('products').delete().eq('id', id)
+      // Soft delete: update is_deleted to true
+      const { data, error: deleteError } = await supabase.from('products').update({ is_deleted: true }).eq('id', id).select()
       if (deleteError) throw deleteError
+      if (!data || data.length === 0) throw new Error("Failed to delete: No rows were updated. Are you sure you ran the SQL command?")
+      
       await fetchProducts()
       return { success: true }
     } catch (err) {
@@ -89,5 +95,23 @@ export function useProducts() {
     }
   }
 
-  return { products, loading, error, fetchProducts, addProduct, updateProduct, deleteProduct }
+  const deleteBatch = async (batchId) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const { data, error: deleteError } = await supabase.from('batches').update({ is_deleted: true }).eq('id', batchId).select()
+      if (deleteError) throw deleteError
+      if (!data || data.length === 0) throw new Error("Failed to delete: No rows were updated. Are you sure you ran the SQL command to add is_deleted to batches?")
+      await fetchProducts()
+      return { success: true }
+    } catch (err) {
+      console.error("Error deleting batch:", err)
+      setError(err.message || 'Failed to delete batch')
+      return { success: false, error: err.message }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return { products, loading, error, fetchProducts, addProduct, updateProduct, deleteProduct, deleteBatch }
 }
