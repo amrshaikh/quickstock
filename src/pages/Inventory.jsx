@@ -141,6 +141,11 @@ export default function Inventory() {
     e.preventDefault()
     const fd = new FormData(e.target)
     const quantity = Number(fd.get('quantity'))
+    const shelfLife = Number(fd.get('shelf_life_days')) || 365
+    
+    if (shelfLife !== selectedProduct.shelf_life_days) {
+      await updateProduct(selectedProduct.id, { shelf_life_days: shelfLife })
+    }
     
     if (editingBatch) {
       const data = {
@@ -149,8 +154,7 @@ export default function Inventory() {
         pricing_unit: fd.get('pricing_unit'),
         retail_price: Number(fd.get('retail_price')),
         wholesale_price: Number(fd.get('wholesale_price')) || null,
-        date_added: fd.get('date_added') ? new Date(fd.get('date_added')).toISOString() : new Date().toISOString(),
-        shelf_life_days: Number(fd.get('shelf_life_days')) || 365
+        date_added: fd.get('date_added') ? new Date(fd.get('date_added')).toISOString() : new Date().toISOString()
       }
       
       const quantityDiff = quantity - editingBatch.quantity_received
@@ -174,10 +178,14 @@ export default function Inventory() {
         pricing_unit: fd.get('pricing_unit'),
         retail_price: Number(fd.get('retail_price')),
         wholesale_price: Number(fd.get('wholesale_price')) || null,
-        date_added: fd.get('date_added') ? new Date(fd.get('date_added')).toISOString() : new Date().toISOString(),
-        shelf_life_days: Number(fd.get('shelf_life_days')) || 365
+        date_added: fd.get('date_added') ? new Date(fd.get('date_added')).toISOString() : new Date().toISOString()
       }
-      await supabase.from('batches').insert([data])
+      
+      const { error } = await supabase.from('batches').insert([data])
+      if (error) {
+        alert("Error adding batch: " + error.message)
+        return
+      }
     }
     await fetchProducts()
     setBatchModalOpen(false)
@@ -502,7 +510,7 @@ export default function Inventory() {
 
           <div>
             <label className="block text-xs font-semibold text-stone-600 mb-1">Shelf Life (Days)</label>
-            <input name="shelf_life_days" type="number" placeholder="365" defaultValue={editingBatch?.shelf_life_days || 365} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
+            <input name="shelf_life_days" type="number" placeholder="365" defaultValue={selectedProduct?.shelf_life_days || 365} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
           </div>
 
           <div className="pt-2">
