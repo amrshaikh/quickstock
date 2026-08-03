@@ -5,27 +5,97 @@ import { Modal } from '../components/ui/Modal'
 import { supabase } from '../lib/supabaseClient'
 
 export default function Inventory() {
-  const { products, loading, error, fetchProducts, addProduct, updateProduct, deleteProduct, deleteBatch } = useProducts()
+  const { products, loading, error, fetchProducts, addProduct, updateProduct, deleteProduct, deleteBatch, updateBatch } = useProducts()
   const [isProductModalOpen, setProductModalOpen] = useState(false)
   const [isBatchModalOpen, setBatchModalOpen] = useState(false)
   const [isDetailsModalOpen, setDetailsModalOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [searchQ, setSearchQ] = useState('')
+  const [editingBatch, setEditingBatch] = useState(null)
 
   const [batchCostPrice, setBatchCostPrice] = useState('')
   const [batchRetailPrice, setBatchRetailPrice] = useState('')
   const [batchWholesalePrice, setBatchWholesalePrice] = useState('')
+  const [batchRetailMargin, setBatchRetailMargin] = useState('')
+  const [batchWholesaleMargin, setBatchWholesaleMargin] = useState('')
 
-  const handleMarginChange = (margin, type) => {
+  const handleCostChange = (val) => {
+    setBatchCostPrice(val)
+    const cost = Number(val)
+    if (!isNaN(cost) && cost > 0) {
+      if (batchRetailPrice) {
+        const rp = Number(batchRetailPrice)
+        if (!isNaN(rp)) setBatchRetailMargin((((rp - cost) / cost) * 100).toFixed(2).replace(/\.00$/, ''))
+      }
+      if (batchWholesalePrice) {
+        const wp = Number(batchWholesalePrice)
+        if (!isNaN(wp)) setBatchWholesaleMargin((((wp - cost) / cost) * 100).toFixed(2).replace(/\.00$/, ''))
+      }
+    }
+  }
+
+  const handlePriceChange = (val, type) => {
+    if (type === 'retail') setBatchRetailPrice(val)
+    else setBatchWholesalePrice(val)
+    
     if (!batchCostPrice) return
     const cost = Number(batchCostPrice)
-    const pct = Number(margin)
-    if (!isNaN(cost) && !isNaN(pct)) {
-      const price = cost + (cost * pct / 100)
-      if (type === 'retail') setBatchRetailPrice(price.toFixed(2))
-      else setBatchWholesalePrice(price.toFixed(2))
+    const price = Number(val)
+    if (!isNaN(cost) && !isNaN(price) && cost > 0 && val !== '') {
+      const margin = (((price - cost) / cost) * 100).toFixed(2).replace(/\.00$/, '')
+      if (type === 'retail') setBatchRetailMargin(margin)
+      else setBatchWholesaleMargin(margin)
+    } else {
+      if (type === 'retail') setBatchRetailMargin('')
+      else setBatchWholesaleMargin('')
     }
+  }
+
+  const handleMarginChange = (val, type) => {
+    if (type === 'retail') setBatchRetailMargin(val)
+    else setBatchWholesaleMargin(val)
+
+    if (!batchCostPrice) return
+    const cost = Number(batchCostPrice)
+    const margin = Number(val)
+    if (!isNaN(cost) && !isNaN(margin) && val !== '') {
+      const price = (cost + (cost * margin / 100)).toFixed(2)
+      if (type === 'retail') setBatchRetailPrice(price)
+      else setBatchWholesalePrice(price)
+    }
+  }
+
+  const openBatchModal = (prod) => {
+    setEditingBatch(null)
+    setSelectedProduct(prod)
+    setBatchCostPrice('')
+    setBatchRetailPrice('')
+    setBatchWholesalePrice('')
+    setBatchRetailMargin('')
+    setBatchWholesaleMargin('')
+    setBatchModalOpen(true)
+  }
+
+  const openEditBatchModal = (batch) => {
+    setEditingBatch(batch)
+    setBatchCostPrice(batch.cost_price || '')
+    setBatchRetailPrice(batch.retail_price || '')
+    setBatchWholesalePrice(batch.wholesale_price || '')
+    
+    if (batch.cost_price && batch.retail_price) {
+       setBatchRetailMargin((((batch.retail_price - batch.cost_price) / batch.cost_price) * 100).toFixed(2).replace(/\.00$/, ''))
+    } else {
+       setBatchRetailMargin('')
+    }
+    
+    if (batch.cost_price && batch.wholesale_price) {
+       setBatchWholesaleMargin((((batch.wholesale_price - batch.cost_price) / batch.cost_price) * 100).toFixed(2).replace(/\.00$/, ''))
+    } else {
+       setBatchWholesaleMargin('')
+    }
+    
+    setBatchModalOpen(true)
   }
 
   useEffect(() => {
@@ -71,17 +141,44 @@ export default function Inventory() {
     e.preventDefault()
     const fd = new FormData(e.target)
     const quantity = Number(fd.get('quantity'))
-    const data = {
-      product_id: selectedProduct.id,
-      quantity_received: quantity,
-      quantity_remaining: quantity,
-      cost_price: Number(fd.get('cost_price')),
-      pricing_unit: fd.get('pricing_unit'),
-      retail_price: Number(fd.get('retail_price')),
-      wholesale_price: Number(fd.get('wholesale_price')) || null,
-      date_added: fd.get('date_added') ? new Date(fd.get('date_added')).toISOString() : new Date().toISOString()
+    
+    if (editingBatch) {
+      const data = {
+        quantity_received: quantity,
+        cost_price: Number(fd.get('cost_price')),
+        pricing_unit: fd.get('pricing_unit'),
+        retail_price: Number(fd.get('retail_price')),
+        wholesale_price: Number(fd.get('wholesale_price')) || null,
+        date_added: fd.get('date_added') ? new Date(fd.get('date_added')).toISOString() : new Date().toISOString(),
+        shelf_life_days: Number(fd.get('shelf_life_days')) || 365
+      }
+      
+      const quantityDiff = quantity - editingBatch.quantity_received
+      data.quantity_remaining = editingBatch.quantity_remaining + quantityDiff
+      
+      const res = await updateBatch(editingBatch.id, data)
+      if (res.success) {
+        setSelectedProduct(prev => ({
+          ...prev,
+          batches: prev.batches.map(b => b.id === editingBatch.id ? { ...b, ...data } : b)
+        }))
+      } else {
+        alert("Error updating batch: " + res.error)
+      }
+    } else {
+      const data = {
+        product_id: selectedProduct.id,
+        quantity_received: quantity,
+        quantity_remaining: quantity,
+        cost_price: Number(fd.get('cost_price')),
+        pricing_unit: fd.get('pricing_unit'),
+        retail_price: Number(fd.get('retail_price')),
+        wholesale_price: Number(fd.get('wholesale_price')) || null,
+        date_added: fd.get('date_added') ? new Date(fd.get('date_added')).toISOString() : new Date().toISOString(),
+        shelf_life_days: Number(fd.get('shelf_life_days')) || 365
+      }
+      await supabase.from('batches').insert([data])
     }
-    await supabase.from('batches').insert([data])
     await fetchProducts()
     setBatchModalOpen(false)
   }
@@ -185,10 +282,7 @@ export default function Inventory() {
             <div className="bg-stone-50 border-t border-stone-100 px-4 py-2.5 flex items-center justify-between gap-2">
               <span className="text-xs text-stone-500 flex-1">Register new stock batch:</span>
               <button
-                onClick={() => {
-                  setSelectedProduct(prod)
-                  setBatchModalOpen(true)
-                }}
+                onClick={() => openBatchModal(prod)}
                 className="bg-emerald-600 text-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-emerald-700 active:scale-95 transition-all flex items-center gap-1"
               >
                 <PackagePlus size={14} /> Add Batch
@@ -226,57 +320,6 @@ export default function Inventory() {
           </div>
           <div className="pt-2">
             <button type="submit" className="w-full bg-gradient-to-r from-amber-600 to-amber-500 text-white py-3 rounded-xl font-bold text-sm shadow-md hover:from-amber-700 hover:to-amber-600 transition-all">Save Product</button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal isOpen={isBatchModalOpen} onClose={() => setBatchModalOpen(false)} title={`Add Batch: ${selectedProduct?.name}`}>
-        <form onSubmit={handleAddBatch} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-stone-600 mb-1">Quantity Received</label>
-            <input name="quantity" type="number" step="0.01" required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-stone-600 mb-1">Pricing Unit</label>
-            <select name="pricing_unit" required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none">
-              <option value="per_kg">Per kg</option>
-              <option value="per_piece">Per piece</option>
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-stone-600 mb-1">Cost Price (₹)</label>
-              <input name="cost_price" type="number" step="0.01" value={batchCostPrice} onChange={e => setBatchCostPrice(e.target.value)} required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-stone-600 mb-1">Retail Price (₹)</label>
-              <div className="flex gap-2">
-                <input name="retail_price" type="number" step="0.01" value={batchRetailPrice} onChange={e => setBatchRetailPrice(e.target.value)} required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
-                <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-lg px-2 w-24">
-                  <input type="number" placeholder="Margin" onChange={e => handleMarginChange(e.target.value, 'retail')} className="w-full bg-transparent text-sm focus:outline-none text-right" />
-                  <span className="text-stone-400 text-xs font-bold">%</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-stone-600 mb-1">Wholesale Price (₹)</label>
-              <div className="flex gap-2">
-                <input name="wholesale_price" type="number" step="0.01" value={batchWholesalePrice} onChange={e => setBatchWholesalePrice(e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
-                <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-lg px-2 w-24">
-                  <input type="number" placeholder="Margin" onChange={e => handleMarginChange(e.target.value, 'wholesale')} className="w-full bg-transparent text-sm focus:outline-none text-right" />
-                  <span className="text-stone-400 text-xs font-bold">%</span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-stone-600 mb-1">Date Received</label>
-              <input name="date_added" type="datetime-local" className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" defaultValue={new Date().toISOString().slice(0, 16)} />
-            </div>
-          </div>
-          <div className="pt-2">
-            <button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 text-white py-3 rounded-xl font-bold text-sm shadow-md hover:from-emerald-700 hover:to-emerald-600 transition-all">Add Batch</button>
           </div>
         </form>
       </Modal>
@@ -347,9 +390,16 @@ export default function Inventory() {
                               <td className="px-4 py-3 text-right font-bold text-amber-700">{Number(batch.quantity_remaining).toFixed(3)}</td>
                               <td className="px-4 py-3 text-right text-emerald-600">₹{batch.retail_price}</td>
                               <td className="px-4 py-3 text-right">
-                                <button
-                                  onClick={async () => {
-                                    if(window.confirm('Are you sure you want to delete this batch?')) {
+                                <div className="flex items-center justify-end gap-3">
+                                  <button
+                                    onClick={() => openEditBatchModal(batch)}
+                                    className="text-stone-300 hover:text-amber-500 transition-colors"
+                                  >
+                                    <Edit2 size={14} />
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if(window.confirm('Are you sure you want to delete this batch?')) {
                                       const res = await deleteBatch(batch.id)
                                       if(!res.success) alert(res.error)
                                       else {
@@ -365,6 +415,7 @@ export default function Inventory() {
                                 >
                                   <Trash2 size={14} />
                                 </button>
+                                </div>
                               </td>
                             </tr>
                           ))
@@ -399,6 +450,68 @@ export default function Inventory() {
           </div>
         )}
       </Modal>
+
+      <Modal isOpen={isBatchModalOpen} onClose={() => setBatchModalOpen(false)} title={editingBatch ? 'Edit Batch' : `Add Batch: ${selectedProduct?.name}`}>
+        <form onSubmit={handleAddBatch} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-600 mb-1">Quantity Received</label>
+              <input name="quantity" type="number" step="0.01" defaultValue={editingBatch?.quantity_received || ''} required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-600 mb-1">Pricing Unit</label>
+              <select name="pricing_unit" defaultValue={editingBatch?.pricing_unit || 'per_kg'} required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none">
+                <option value="per_kg">Per kg</option>
+                <option value="per_piece">Per piece</option>
+              </select>
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-xs font-semibold text-stone-600 mb-1">Cost Price (₹)</label>
+            <input name="cost_price" type="number" step="0.01" value={batchCostPrice} onChange={e => handleCostChange(e.target.value)} required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-600 mb-1">Wholesale Price (₹)</label>
+              <div className="flex gap-2">
+                <input name="wholesale_price" type="number" step="0.01" value={batchWholesalePrice} onChange={e => handlePriceChange(e.target.value, 'wholesale')} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
+                <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-lg px-2 w-24">
+                  <input type="number" placeholder="Margin" value={batchWholesaleMargin} onChange={e => handleMarginChange(e.target.value, 'wholesale')} className="w-full bg-transparent text-sm focus:outline-none text-right" />
+                  <span className="text-stone-400 text-xs font-bold">%</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-600 mb-1">Retail Price (₹)</label>
+              <div className="flex gap-2">
+                <input name="retail_price" type="number" step="0.01" value={batchRetailPrice} onChange={e => handlePriceChange(e.target.value, 'retail')} required className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
+                <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-lg px-2 w-24">
+                  <input type="number" placeholder="Margin" value={batchRetailMargin} onChange={e => handleMarginChange(e.target.value, 'retail')} className="w-full bg-transparent text-sm focus:outline-none text-right" />
+                  <span className="text-stone-400 text-xs font-bold">%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-xs font-semibold text-stone-600 mb-1">Date Received</label>
+            <input name="date_added" type="datetime-local" className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" defaultValue={editingBatch ? new Date(editingBatch.date_added).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16)} />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-600 mb-1">Shelf Life (Days)</label>
+            <input name="shelf_life_days" type="number" placeholder="365" defaultValue={editingBatch?.shelf_life_days || 365} className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm bg-stone-50 focus:ring-2 focus:ring-amber-400 focus:outline-none" />
+          </div>
+
+          <div className="pt-2">
+            <button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 text-white py-3 rounded-xl font-bold text-sm shadow-md hover:from-emerald-700 hover:to-emerald-600 transition-all">{editingBatch ? 'Update Batch' : 'Add Batch'}</button>
+          </div>
+        </form>
+      </Modal>
+
+
     </div>
   )
 }

@@ -95,6 +95,22 @@ export function useProducts() {
     }
   }
 
+  const updateBatch = async (batchId, batchData) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const { error: updateError } = await supabase.from('batches').update(batchData).eq('id', batchId)
+      if (updateError) throw updateError
+      return { success: true }
+    } catch (err) {
+      console.error("Error updating batch:", err)
+      setError(err.message || 'Failed to update batch')
+      return { success: false, error: err.message }
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const deleteBatch = async (batchId) => {
     setLoading(true)
     setError(null)
@@ -113,5 +129,5 @@ export function useProducts() {
     }
   }
 
-  return { products, loading, error, fetchProducts, addProduct, updateProduct, deleteProduct, deleteBatch }
+  return { products, loading, error, fetchProducts, addProduct, updateProduct, deleteProduct, deleteBatch, updateBatch }
 }
